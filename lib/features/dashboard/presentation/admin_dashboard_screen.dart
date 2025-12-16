@@ -37,11 +37,11 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                 // 상단 헤더
                 agencyNameAsync.when(
                   data: (name) =>
-                      DashboardHeader(agencyName: name, currentTab: '개요'),
+                      DashboardHeader(agencyName: name, currentTab: '대시보드'),
                   loading: () =>
-                      DashboardHeader(agencyName: null, currentTab: '개요'),
+                      DashboardHeader(agencyName: null, currentTab: '대시보드'),
                   error: (_, __) =>
-                      DashboardHeader(agencyName: null, currentTab: '개요'),
+                      DashboardHeader(agencyName: null, currentTab: '대시보드'),
                 ),
                 // 메인 콘텐츠
                 Expanded(

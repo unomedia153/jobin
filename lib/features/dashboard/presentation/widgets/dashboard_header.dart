@@ -10,7 +10,7 @@ class DashboardHeader extends StatelessWidget {
   const DashboardHeader({
     super.key,
     this.agencyName,
-    this.currentTab = '개요',
+    this.currentTab = '대시보드',
   });
 
   @override
@@ -44,8 +44,8 @@ class DashboardHeader extends StatelessWidget {
             child: Row(
               children: [
                 _TabItem(
-                  label: '개요',
-                  isActive: currentTab == '개요',
+                  label: '대시보드',
+                  isActive: currentTab == '대시보드',
                   onTap: () => context.go('/admin-dashboard'),
                 ),
                 const SizedBox(width: 8),
