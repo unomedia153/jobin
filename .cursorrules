@@ -1,0 +1,65 @@
+# JobIn - 인력송출 B2B SaaS 플랫폼 (Flutter + Supabase)
+
+## 프로젝트 개요
+- **프로젝트명**: JobIn (잡인)
+- **목적**: 용역회사(Admin)와 고객사(Client)를 연결하고 작업자(Worker)를 배치하는 플랫폼.
+- **비즈니스 모델**: B2B SaaS (용역회사 월 구독). PG 결제 없음(장부 관리만).
+- **타겟 고객**: 
+  - Primary: 용역회사 소장님 (PC Web 사용, 관리 효율성 중요)
+  - Worker: 60대 이상 노년층 많음 (Mobile App 사용, 큰 글씨/쉬운 UI 필수)
+
+## 기술 스택
+- **Framework**: Flutter (Mobile iOS/Android + Web 통합)
+- **Language**: Dart
+- **Backend**: Supabase (Auth, Database, Realtime, Storage, Edge Functions)
+- **State Management**: Riverpod (Code Generation w/ riverpod_annotation)
+- **Routing**: GoRouter
+- **Model Generation**: Freezed + JsonSerializable
+- **Map/GPS**: Geolocator (출근 체크용)
+
+## 핵심 용어 정의 (Strict Terminology)
+AI는 아래 용어를 엄격히 준수해야 함.
+- **Placement (배치)**: 'Matching' 금지. 소장이 작업자를 지정하여 보내는 행위.
+- **Proposal (배치의향서)**: 소장이 작업자에게 "이 현장 갈래요?" 보내는 요청 (Status: offered).
+- **Placement Completed (배치완료)**: 작업자가 수락하여 확정이 된 상태 (Status: accepted).
+- **Ledger (장부)**: 결제(Payment) 대신 사용하는 정산 기록 용어.
+
+## 폴더 구조 (Clean Architecture + Feature-first)
+lib/ ├── core/ │ ├── constants/ # Supabase Key, App Colors │ ├── theme/ # 텍스트 스타일 (AppTheme) │ └── utils/ # 포맷터, Exception Handler ├── features/ │ ├── auth/ # 로그인 (카카오, 문자인증) │ ├── dashboard/ # (Web) 소장님용 대시보드 │ ├── placement/ # (Core) 배치 및 수락 로직 │ ├── worker_job/ # (App) 작업자용 일감 리스트 │ └── ledger/ # 장부 관리 ├── common/ │ └── widgets/ # 공통 위젯 (ResponsiveLayout 포함) └── main.dart
+
+
+## 코딩 규칙 (Flutter & Riverpod)
+
+### 1. State Management & Logic
+- `StatefulWidget` 사용 지양. `ConsumerWidget` 또는 `HookConsumerWidget` 사용.
+- 비즈니스 로직은 UI에 두지 말고 `NotifierProvider`로 분리할 것.
+- **AsyncValue Handling**: 데이터 로딩 중(`AsyncLoading`)과 에러(`AsyncError`) 상태를 반드시 처리할 것.
+
+### 2. UI/UX 가이드라인 (타겟 맞춤)
+- **Responsive**: `LayoutBuilder`를 사용하여 800px 기준 Mobile/Web 분기.
+- **Worker App (Mobile)**:
+  - 폰트: 본문 최소 16sp, 제목 20sp 이상. (노안 배려)
+  - 버튼: 높이 최소 56dp. '수락', '거절' 버튼은 화면 하단에 고정하고 색상 대비를 명확히 할 것.
+- **Admin Web**:
+  - 데이터 그리드 형태 선호. 정보 밀도를 높일 것.
+
+### 3. Supabase & DB 가이드라인
+- **SDK 사용**: REST API 호출(`http.get`) 금지. `Supabase.instance.client` 사용 필수.
+- **Realtime**: `StreamProvider`를 사용하여 DB 변경 시 UI가 즉시 반응하도록 구현.
+- **Repository Pattern**: 모든 DB 접근 로직은 `Repository` 클래스로 분리.
+
+### 4. 필수 데이터베이스 컬럼 (Common Fields)
+모든 테이블 생성 시 아래 컬럼을 기본적으로 포함할 것:
+- `id`: UUID (Primary Key)
+- `created_at`: TIMESTAMP (Default Now)
+- `updated_at`: TIMESTAMP (Trigger 활용)
+- `deleted_at`: TIMESTAMP (Nullable, Soft Delete 용도)
+
+### 5. 에러 핸들링 (Error Handling)
+- **User Feedback**: 에러 발생 시 콘솔 로그만 찍지 말고, `SnackBar` 또는 `AlertDialog`로 사용자에게 알릴 것.
+- **Type Safety**: `try-catch` 블록 내에서 `PostgrestException` (Supabase 에러)을 구체적으로 잡아서 처리할 것.
+
+## AI 행동 지침
+- 코드를 작성할 때는 항상 **"이 코드가 노인이 보기에 편한가?"**(앱) 또는 **"소장님이 쓰기에 빠른가?"**(웹)를 먼저 생각할 것.
+- `freezed` 모델이 필요한 경우 `@freezed` 어노테이션을 포함하고 `part` 파일을 명시할 것.
+- 불필요한 주석보다는 명확한 변수명을 사용할 것.

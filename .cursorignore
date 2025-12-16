@@ -1,0 +1,54 @@
+# ============================================
+# jobin 프로젝트 - Cursor AI 무시 파일 (Flutter 최적화)
+# ============================================
+
+# Flutter/Dart 관련 (필수)
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+build/
+ios/Flutter/Generated.xcconfig
+ios/Flutter/flutter_export_environment.sh
+android/local.properties
+
+# 의존성 및 로그
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+*.log
+
+# OS 파일
+.DS_Store
+Thumbs.db
+
+# IDE 설정
+.vscode/
+.idea/
+*.iml
+
+# 환경 변수 (민감 정보)
+.env
+.env.*
+
+# 미디어 및 대용량 파일
+*.mp4
+*.mov
+*.zip
+*.csv
+*.xlsx
+
+# 문서 및 보안
+proposals/confidential/
+contracts/
+worker-database/
+client-data/
+
+# ============================================
+# 읽어야 하는 중요 파일 (AI가 꼭 봐야 함)
+# ============================================
+!pubspec.yaml
+!analysis_options.yaml
+!lib/main.dart
+!.cursorrules
+!README.md
