@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../job/presentation/widgets/job_order_create_dialog.dart';
 
 class DashboardHeader extends StatelessWidget {
   final String? agencyName;
@@ -83,10 +84,16 @@ class DashboardHeader extends StatelessWidget {
           ),
           // 우측 액션 버튼들
           ElevatedButton.icon(
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('오더 등록 기능은 준비 중입니다.')),
+            onPressed: () async {
+              final result = await showDialog(
+                context: context,
+                builder: (context) => const JobOrderCreateDialog(),
               );
+              
+              // 오더 등록 성공 시 대시보드 새로고침 (필요한 경우)
+              if (result == true) {
+                // TODO: 대시보드 데이터 새로고침
+              }
             },
             icon: const Icon(Icons.add, size: 18),
             label: const Text('오더 등록'),
