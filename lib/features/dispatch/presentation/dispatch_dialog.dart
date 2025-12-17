@@ -87,7 +87,23 @@ class _DispatchDialogState extends ConsumerState<DispatchDialog> {
     final workDate = widget.jobOrder['work_date'] as String?;
     final workType = widget.jobOrder['work_type'] as String? ?? '-';
 
-    final workersAsync = ref.watch(workersListProvider(_searchQuery));
+    // 작업 날짜 파싱
+    DateTime? workDateTime;
+    if (workDate != null) {
+      try {
+        workDateTime = DateTime.parse(workDate);
+      } catch (_) {
+        workDateTime = null;
+      }
+    }
+
+    // 가용 작업자 목록 조회 (해당 날짜에 배정되지 않은 작업자만)
+    final workersAsync = workDateTime != null
+        ? ref.watch(availableWorkersProvider((
+            date: workDateTime,
+            searchQuery: _searchQuery.isEmpty ? null : _searchQuery,
+          )))
+        : const AsyncValue.loading();
 
     return Dialog(
       shape: RoundedRectangleBorder(
@@ -105,7 +121,7 @@ class _DispatchDialogState extends ConsumerState<DispatchDialog> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  '배차하기 - ${site?['name'] ?? '현장명 없음'}',
+                  '작업자 배치 - ${site?['name'] ?? '현장명 없음'}',
                   style: const TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
@@ -205,17 +221,52 @@ class _DispatchDialogState extends ConsumerState<DispatchDialog> {
             ),
             const SizedBox(height: 16),
 
+            // "배치 가능한 작업자" 라벨
+            Row(
+              children: [
+                const Icon(
+                  Icons.people_outline,
+                  size: 18,
+                  color: AppColors.textSecondary,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '배치 가능한 작업자',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey[700],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+
             // 작업자 리스트
             Expanded(
               child: workersAsync.when(
                 data: (workers) {
                   if (workers.isEmpty) {
-                    return const Center(
-                      child: Text(
-                        '작업자가 없습니다.',
-                        style: TextStyle(
-                          color: AppColors.textSecondary,
-                        ),
+                    return Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.person_off,
+                            size: 48,
+                            color: Colors.grey[400],
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            workDateTime == null
+                                ? '작업 날짜를 확인할 수 없습니다.'
+                                : '배치 가능한 작업자가 없습니다.',
+                            style: TextStyle(
+                              color: Colors.grey[600],
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
                       ),
                     );
                   }
@@ -273,7 +324,7 @@ class _DispatchDialogState extends ConsumerState<DispatchDialog> {
                                         ),
                                       ),
                                       child: const Text(
-                                        '배정',
+                                        '선택',
                                         style: TextStyle(
                                           color: AppColors.primary,
                                         ),

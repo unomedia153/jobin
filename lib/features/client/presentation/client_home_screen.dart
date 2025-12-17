@@ -73,7 +73,7 @@ class ClientHomeScreen extends ConsumerWidget {
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      '첫 인력 요청 시, 담당 소장님의 확인 전화(본인확인) 후 배차가 확정됩니다.',
+                      '첫 인력 요청 시, 담당 소장님의 확인 전화(본인확인) 후 배치가 확정됩니다.',
                       style: TextStyle(
                         fontSize: 14,
                         color: AppColors.textSecondary,

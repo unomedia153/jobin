@@ -87,7 +87,7 @@ class DashboardRepository {
     }
   }
 
-  /// 배차 대기 건수 조회 (오더는 있으나 작업자 미확정)
+  /// 배치 대기 건수 조회 (오더는 있으나 작업자 미확정)
   Future<int> getPendingPlacementsCount(String agencyId) async {
     try {
       final siteIds = await _getSiteIdsByAgency(agencyId);

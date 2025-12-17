@@ -134,7 +134,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
         const SizedBox(width: 16),
         Expanded(
           child: StatCard(
-            label: '배차 대기',
+            label: '배치 대기',
             value: stats.pendingPlacements,
             icon: Icons.pending_actions,
             color: AppColors.warning,
@@ -254,7 +254,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                           DataColumn(label: Text('날짜', style: _headerStyle)),
                           DataColumn(label: Text('직종', style: _headerStyle)),
                           DataColumn(label: Text('필요인원', style: _headerStyle)),
-                          DataColumn(label: Text('배차상태', style: _headerStyle)),
+                          DataColumn(label: Text('배치상태', style: _headerStyle)),
                           DataColumn(label: Text('상태', style: _headerStyle)),
                           DataColumn(label: Text('액션', style: _headerStyle)),
                         ],
@@ -343,7 +343,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                                       ),
                                     ),
                                     child: const Text(
-                                      '배차하기',
+                                      '배치하기',
                                       style: TextStyle(
                                         fontSize: 12,
                                         color: AppColors.primary,
@@ -455,7 +455,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
   Widget _buildPlacementStatusCard(AsyncValue<DashboardStats> statsAsync) {
     return statsAsync.when(
       data: (stats) => CircularProgressCard(
-        title: '배차 현황',
+        title: '배치 현황',
         value: stats.pendingPlacements,
         label: '대기 중',
         icon: Icons.pending_actions,
