@@ -265,7 +265,10 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                           final acceptedCount = placements
                               .where((p) => (p as Map)['status'] == 'accepted')
                               .length;
-                          final totalNeeded = placements.length;
+                          // required_workers 컬럼 값을 사용
+                          final requiredWorkers =
+                              order['required_workers'] as int? ?? 0;
+                          final isCompleted = acceptedCount >= requiredWorkers;
 
                           return DataRow(
                             cells: [
@@ -284,9 +287,11 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                                   style: _cellStyle,
                                 ),
                               ),
+                              // 필요인원: required_workers 표시
                               DataCell(
-                                Text('$totalNeeded명', style: _cellStyle),
+                                Text('$requiredWorkers명', style: _cellStyle),
                               ),
+                              // 배치상태: (acceptedCount) / (requiredWorkers) 명
                               DataCell(
                                 RichText(
                                   text: TextSpan(
@@ -295,14 +300,14 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                                         text: '$acceptedCount',
                                         style: TextStyle(
                                           fontWeight: FontWeight.bold,
-                                          color: acceptedCount == totalNeeded
+                                          color: isCompleted
                                               ? AppColors.success
                                               : AppColors.primary,
                                           fontSize: 13,
                                         ),
                                       ),
                                       TextSpan(
-                                        text: '/$totalNeeded명',
+                                        text: '/$requiredWorkers명',
                                         style: _cellStyle,
                                       ),
                                     ],
@@ -310,46 +315,89 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                                 ),
                               ),
                               DataCell(
-                                _buildStatusChip(acceptedCount, totalNeeded),
+                                _buildStatusChip(
+                                  acceptedCount,
+                                  requiredWorkers,
+                                ),
                               ),
                               DataCell(
                                 SizedBox(
                                   height: 30,
-                                  child: OutlinedButton(
-                                    onPressed: () async {
-                                      final result = await showDialog<bool>(
-                                        context: context,
-                                        builder: (context) =>
-                                            DispatchDialog(jobOrder: order),
-                                      );
+                                  child: isCompleted
+                                      ? OutlinedButton(
+                                          onPressed: () {
+                                            // TODO: 수정하기 기능 구현
+                                            ScaffoldMessenger.of(
+                                              context,
+                                            ).showSnackBar(
+                                              const SnackBar(
+                                                content: Text(
+                                                  '수정하기 기능은 준비 중입니다.',
+                                                ),
+                                              ),
+                                            );
+                                          },
+                                          style: OutlinedButton.styleFrom(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 12,
+                                            ),
+                                            side: BorderSide(
+                                              color: Colors.grey.shade400,
+                                            ),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(6),
+                                            ),
+                                          ),
+                                          child: Text(
+                                            '수정하기',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.grey.shade700,
+                                            ),
+                                          ),
+                                        )
+                                      : OutlinedButton(
+                                          onPressed: () async {
+                                            final result =
+                                                await showDialog<bool>(
+                                                  context: context,
+                                                  builder: (context) =>
+                                                      DispatchDialog(
+                                                        jobOrder: order,
+                                                      ),
+                                                );
 
-                                      // 배정이 완료되면 대시보드 새로고침
-                                      if (result == true && mounted) {
-                                        ref.invalidate(activeJobOrdersProvider);
-                                        ref.invalidate(
-                                          dashboardControllerProvider,
-                                        );
-                                      }
-                                    },
-                                    style: OutlinedButton.styleFrom(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 12,
-                                      ),
-                                      side: const BorderSide(
-                                        color: AppColors.primary,
-                                      ),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(6),
-                                      ),
-                                    ),
-                                    child: const Text(
-                                      '배치하기',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: AppColors.primary,
-                                      ),
-                                    ),
-                                  ),
+                                            // 배정이 완료되면 대시보드 새로고침
+                                            if (result == true && mounted) {
+                                              ref.invalidate(
+                                                activeJobOrdersProvider,
+                                              );
+                                              ref.invalidate(
+                                                dashboardControllerProvider,
+                                              );
+                                            }
+                                          },
+                                          style: OutlinedButton.styleFrom(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 12,
+                                            ),
+                                            side: const BorderSide(
+                                              color: AppColors.primary,
+                                            ),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(6),
+                                            ),
+                                          ),
+                                          child: const Text(
+                                            '배치하기',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: AppColors.primary,
+                                            ),
+                                          ),
+                                        ),
                                 ),
                               ),
                             ],
@@ -545,7 +593,8 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
   }
 
   Widget _buildStatusChip(int accepted, int total) {
-    if (accepted == total && total > 0) {
+    // 완료 조건: accepted >= total (목표 인원 이상 배정됨)
+    if (accepted >= total && total > 0) {
       return Chip(
         label: const Text('완료'),
         backgroundColor: AppColors.success.withValues(alpha: 0.2),
