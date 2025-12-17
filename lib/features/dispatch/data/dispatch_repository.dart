@@ -1,4 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:intl/intl.dart';
 
 /// 가용 작업자 목록 조회 결과 (통계 정보 포함)
 class AvailableWorkersResult {
@@ -25,53 +26,30 @@ class DispatchRepository {
     String? searchQuery,
   }) async {
     try {
-      // 1. 전체 작업자 목록 조회
-      final workersResponse = await _supabase
+      // Step 1: 날짜 정규화 (시간 정보 제거, yyyy-MM-dd 형식)
+      final dateStr = DateFormat('yyyy-MM-dd').format(date);
+
+      // Step 2: 데이터 조회 (3가지 병렬 조회)
+      // 2-1. 전체 작업자 목록 조회
+      final allWorkersResponse = await _supabase
           .from('profiles')
           .select()
           .eq('role', 'worker')
           .isFilter('deleted_at', null)
           .order('name', ascending: true);
 
-      final allWorkers = List<Map<String, dynamic>>.from(workersResponse);
+      final allWorkers = List<Map<String, dynamic>>.from(allWorkersResponse);
       final totalWorkers = allWorkers.length;
 
-      // 2. 배차 불가능한 작업자 ID 목록 조회 (Parallel Fetch)
-      final dateStr = date.toIso8601String().split('T')[0]; // YYYY-MM-DD 형식
-      
-      // Query A: 해당 날짜에 이미 배정된 작업자 ID 목록
-      Set<String> assignedWorkerIds = {};
-      final jobOrdersResponse = await _supabase
-          .from('job_orders')
-          .select('id')
-          .eq('work_date', dateStr)
-          .isFilter('deleted_at', null);
-
-      final jobOrderIds = (jobOrdersResponse as List)
-          .map((jo) => jo['id'] as String)
-          .toList();
-
-      if (jobOrderIds.isNotEmpty) {
-        final placementsResponse = await _supabase
-            .from('placements')
-            .select('worker_id')
-            .inFilter('job_order_id', jobOrderIds)
-            .eq('status', 'accepted')
-            .isFilter('deleted_at', null);
-
-        assignedWorkerIds = (placementsResponse as List)
-            .map((p) => p['worker_id'] as String)
-            .toSet();
-      }
-
-      // Query B: 해당 날짜에 휴무인 작업자 ID 목록
+      // 2-2. 휴무자 목록 조회
+      // 조건: start_date <= dateStr AND end_date >= dateStr
       Set<String> onLeaveWorkerIds = {};
       try {
         final leavesResponse = await _supabase
             .from('worker_leaves')
             .select('worker_id')
-            .lte('start_date', dateStr)
-            .gte('end_date', dateStr)
+            .lte('start_date', dateStr) // start_date <= dateStr
+            .gte('end_date', dateStr) // end_date >= dateStr
             .isFilter('deleted_at', null);
 
         onLeaveWorkerIds = (leavesResponse as List)
@@ -82,15 +60,68 @@ class DispatchRepository {
         // 에러를 무시하고 계속 진행
       }
 
-      // 3. 배차 불가능한 작업자 ID 합집합
-      final unavailableWorkerIds = assignedWorkerIds.union(onLeaveWorkerIds);
+      // 2-3. 기배차자 목록 조회 (placements와 job_orders 조인)
+      // placements status가 'accepted'이고, 연결된 job_orders의 work_date가 dateStr인 경우
+      Set<String> assignedWorkerIds = {};
+      try {
+        final placementsResponse = await _supabase
+            .from('placements')
+            .select('''
+              worker_id,
+              job_orders!inner (
+                work_date
+              )
+            ''')
+            .eq('status', 'accepted')
+            .eq('job_orders.work_date', dateStr)
+            .isFilter('deleted_at', null);
 
-      // 4. 가용 작업자 필터링 (배정되지 않고 휴무가 아닌 작업자)
+        assignedWorkerIds = (placementsResponse as List)
+            .map((p) => p['worker_id'] as String)
+            .toSet();
+      } catch (e) {
+        // 조인 쿼리가 실패할 경우 대체 방법 사용
+        // job_orders를 먼저 조회하고 placements 조회
+        try {
+          final jobOrdersResponse = await _supabase
+              .from('job_orders')
+              .select('id')
+              .eq('work_date', dateStr)
+              .isFilter('deleted_at', null);
+
+          final jobOrderIds = (jobOrdersResponse as List)
+              .map((jo) => jo['id'] as String)
+              .toList();
+
+          if (jobOrderIds.isNotEmpty) {
+            final placementsResponse = await _supabase
+                .from('placements')
+                .select('worker_id')
+                .inFilter('job_order_id', jobOrderIds)
+                .eq('status', 'accepted')
+                .isFilter('deleted_at', null);
+
+            assignedWorkerIds = (placementsResponse as List)
+                .map((p) => p['worker_id'] as String)
+                .toSet();
+          }
+        } catch (_) {
+          // 에러 발생 시 빈 Set 유지
+        }
+      }
+
+      // Step 3: 필터링 (Dart 메모리 연산)
+      // 전체 작업자 리스트에서 휴무자와 기배차자 제거
+      final unavailableWorkerIds = onLeaveWorkerIds.union(assignedWorkerIds);
+      
       var availableWorkers = allWorkers
-          .where((worker) => !unavailableWorkerIds.contains(worker['id'] as String))
+          .where((worker) {
+            final workerId = worker['id'] as String;
+            return !unavailableWorkerIds.contains(workerId);
+          })
           .toList();
 
-      // 5. 검색어가 있으면 추가 필터링 (대소문자 구분 없이)
+      // 검색어가 있으면 추가 필터링 (대소문자 구분 없이)
       if (searchQuery != null && searchQuery.isNotEmpty) {
         final lowerQuery = searchQuery.toLowerCase();
         availableWorkers = availableWorkers.where((worker) {
@@ -100,6 +131,7 @@ class DispatchRepository {
         }).toList();
       }
 
+      // Step 4: 최종 반환
       return AvailableWorkersResult(
         workers: availableWorkers,
         totalWorkers: totalWorkers,
