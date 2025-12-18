@@ -26,8 +26,22 @@ class DispatchRepository {
     String? searchQuery,
   }) async {
     try {
-      // Step 1: 날짜 정규화 (시간 정보 제거, yyyy-MM-dd 형식)
-      final dateStr = DateFormat('yyyy-MM-dd').format(date);
+      // Step 1: 날짜 범위를 한국 시간(KST) 기준으로 계산 후 UTC로 변환
+      // - 입력된 date는 "해당 날짜"만 의미한다고 가정 (시간 정보 무시)
+      // - KST 기준 00:00:00 ~ 23:59:59.999 범위를 UTC로 변환해서 사용
+      final localDayStart = DateTime(date.year, date.month, date.day);
+      final localDayEnd = localDayStart
+          .add(const Duration(days: 1))
+          .subtract(const Duration(milliseconds: 1));
+
+      final utcDayStart = localDayStart.toUtc();
+      final utcDayEnd = localDayEnd.toUtc();
+
+      final utcDayStartIso = utcDayStart.toIso8601String();
+      final utcDayEndIso = utcDayEnd.toIso8601String();
+
+      // 기존 DATE 기반 비교를 사용하는 곳(예: worker_leaves, job_orders)을 위해 문자열도 유지
+      final dateStr = DateFormat('yyyy-MM-dd').format(localDayStart);
 
       // Step 2: 데이터 조회 (3가지 병렬 조회)
       // 2-1. 전체 작업자 목록 조회
@@ -41,9 +55,11 @@ class DispatchRepository {
       final allWorkers = List<Map<String, dynamic>>.from(allWorkersResponse);
       final totalWorkers = allWorkers.length;
 
-      // 2-2. 휴무자 목록 조회
-      // 조건: start_date <= dateStr AND end_date >= dateStr
+      // 2-2. 휴무자 목록 조회 (worker_leaves + worker_schedules)
+      // worker_leaves: start_date <= dateStr AND end_date >= dateStr
+      // worker_schedules: 해당 날짜가 '휴무' 상태인 작업자
       Set<String> onLeaveWorkerIds = {};
+      Set<String> offScheduleWorkerIds = {};
       try {
         final leavesResponse = await _supabase
             .from('worker_leaves')
@@ -60,28 +76,66 @@ class DispatchRepository {
         // 에러를 무시하고 계속 진행
       }
 
-      // 2-3. 기배차자 목록 조회 (placements와 job_orders 조인)
-      // placements status가 'accepted'이고, 연결된 job_orders의 work_date가 dateStr인 경우
+      // worker_schedules 기반 휴무일(오프) 처리
+      try {
+        final schedulesResponse = await _supabase
+            .from('worker_schedules')
+            .select('worker_id')
+            // 한국 시간 기준 하루 범위를 UTC로 변환한 값으로 조회
+            .gte('work_date', utcDayStartIso)
+            .lte('work_date', utcDayEndIso)
+            .eq('status', 'off') // 휴무 상태
+            .isFilter('deleted_at', null);
+
+        offScheduleWorkerIds = (schedulesResponse as List)
+            .map((s) => s['worker_id'] as String)
+            .toSet();
+      } catch (e) {
+        // worker_schedules 테이블이 아직 없거나 스키마가 다른 경우 무시
+      }
+
+      // 2-3. 기배차자 목록 조회
+      // 2-3-1. 우선 job_assignments 테이블을 사용해 날짜 범위로 배차된 worker_id 조회
+      // 2-3-2. 실패 시 기존 placements + job_orders 조인 방식으로 폴백
       Set<String> assignedWorkerIds = {};
       try {
-        final placementsResponse = await _supabase
-            .from('placements')
-            .select('''
+        final assignmentsResponse = await _supabase
+            .from('job_assignments')
+            .select('worker_id')
+            // 한국 시간 기준 선택된 날짜의 00:00:00~23:59:59.999 를 UTC로 변환한 값으로 범위 조회
+            .gte('work_date', utcDayStartIso)
+            .lte('work_date', utcDayEndIso)
+            .isFilter('deleted_at', null);
+
+        assignedWorkerIds = (assignmentsResponse as List)
+            .map((a) => a['worker_id'] as String)
+            .toSet();
+      } catch (e) {
+        // job_assignments 테이블이 없거나 스키마가 다른 경우
+        // 기존 placements + job_orders 조인 방식으로 폴백
+
+        // 2-3-2. placements와 job_orders 조인
+        try {
+          final placementsResponse = await _supabase
+              .from('placements')
+              .select('''
               worker_id,
               job_orders!inner (
                 work_date
               )
             ''')
-            .eq('status', 'accepted')
-            .eq('job_orders.work_date', dateStr)
-            .isFilter('deleted_at', null);
+              .eq('status', 'accepted')
+              .eq('job_orders.work_date', dateStr)
+              .isFilter('deleted_at', null);
 
-        assignedWorkerIds = (placementsResponse as List)
-            .map((p) => p['worker_id'] as String)
-            .toSet();
-      } catch (e) {
-        // 조인 쿼리가 실패할 경우 대체 방법 사용
-        // job_orders를 먼저 조회하고 placements 조회
+          assignedWorkerIds = (placementsResponse as List)
+              .map((p) => p['worker_id'] as String)
+              .toSet();
+        } catch (e) {
+          // 조인 쿼리가 실패할 경우 대체 방법 사용
+          // job_orders를 먼저 조회하고 placements 조회
+        }
+
         try {
           final jobOrdersResponse = await _supabase
               .from('job_orders')
@@ -111,8 +165,10 @@ class DispatchRepository {
       }
 
       // Step 3: 필터링 (Dart 메모리 연산)
-      // 전체 작업자 리스트에서 휴무자와 기배차자 제거
-      final unavailableWorkerIds = onLeaveWorkerIds.union(assignedWorkerIds);
+      // 전체 작업자 리스트에서 휴무자(onLeave + schedules)와 기배차자 제거
+      final unavailableWorkerIds = onLeaveWorkerIds
+          .union(offScheduleWorkerIds)
+          .union(assignedWorkerIds);
       
       var availableWorkers = allWorkers
           .where((worker) {
